@@ -1,0 +1,66 @@
+---
+- name: Установка и настройка сервера
+  hosts: all
+  become: yes
+  tasks:
+    - name: Создать пользователя ansible-worker
+      user:
+        name: ansible-worker
+        state: present
+        shell: /bin/bash
+
+    - name: Установить Git
+      apt:
+        name: git
+        state: present
+
+    - name: Копировать SSH-ключи
+      copy:
+        src: ../ssh_keys/
+        dest: /home/ansible-worker/.ssh
+        owner: ansible-worker
+        group: ansible-worker
+        mode: 0600
+      no_log: true
+
+    - name: Склонировать репозиторий
+      git:
+        repo: git@github.com:iphilka/stud-template.git
+        dest: /home/ansible-worker/www/stud-template
+        clone: yes
+        update: yes
+        accept_hostkey: yes
+        key_file: /home/ansible-worker/.ssh/id_rsa
+        force: yes
+
+    - name: Копировать файл index.html
+      copy:
+        src: ../template/index.html
+        dest: /home/ansible-worker/www/stud-template/index.html
+        owner: ansible-worker
+        group: ansible-worker
+        mode: 0644
+
+    - name: Установить пакет nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Копировать конфигурационный файл в sites-available
+      copy:
+        src: ../../nginx/ansible.iphilka.ru.conf
+        dest: /etc/nginx/sites-available/ansible.iphilka.ru.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Создать символическую ссылку в sites-enabled
+      file:
+        src: /etc/nginx/sites-available/ansible.iphilka.ru.conf
+        dest: /etc/nginx/sites-enabled/ansible.iphilka.ru.conf
+        state: link
+
+    - name: Перезапустить сервис Nginx
+      service:
+        name: nginx
+        state: restarted
