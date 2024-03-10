@@ -1,58 +1,45 @@
-- hosts: all
+---
+- name: Setup Web Server
+  hosts: all
   become: yes
-
   tasks:
-    - name: cache update
-      ansible.builtin.apt:
-        update_cache: yes
-
-    - name: User create
-      ansible.builtin.user:
+    - name: Create ansible-worker user
+      user:
         name: ansible-worker
+        state: present
 
-    - name: git install
-      ansible.builtin.apt:
+    - name: Install git
+      apt:
         name: git
         state: present
 
-    - name: set public ssh
-      ansible.posix.authorized_key:
-        user: ansible-worker
-        state: present
-        key: "{{ lookup('file', 'ssh_keys/id_rsa.pub') }}"
-        path: /home/ansible-worker/.ssh
-        manage_dir: yes
+    - name: Copy SSH keys
+      copy:
+        src: ssh_keys/
+        dest: /home/ansible-worker/.ssh/
+        mode: 700
+      ignore_errors: no
 
-    - name: set private ssh
-      ansible.builtin.template:
-        src: ssh_keys/id_rsa
-        dest: /home/ansible-worker/.ssh/id_rsa
-        mode: 0600
-
-    - name: Git clone iphilka repo
-      ansible.builtin.git:
-        repo: https://github.com/iphilka/stud-template.git
-        dest: /home/ansible-worker/www/
-        clone: yes
-        update: no
-
-    - name: nginx install
-      ansible.builtin.apt:
+    - name: Install Nginx
+      apt:
         name: nginx
         state: present
 
-    - name: copy index.html file
-      ansible.builtin.template:
-        src: index.html
-        dest: /home/ansible-worker/www/index.html
+    - name: Copy Nginx config file to sites-available
+      copy:
+        src: config_file/ansible.iphilka.ru.conf
+        dest: /etc/nginx/sites-available/
+      notify: Reload Nginx
 
-    - name: nginx conf file
-      ansible.builtin.template:
-        src: ansible.iphilka.ru.conf
-        dest: /etc/nginx/sites-available/ansible.iphilka.ru.conf
-
-    - name: enable nginx site
-      ansible.builtin.file:
+    - name: Create symbolic link in sites-enabled
+      file:
         src: /etc/nginx/sites-available/ansible.iphilka.ru.conf
         dest: /etc/nginx/sites-enabled/ansible.iphilka.ru.conf
         state: link
+      notify: Reload Nginx
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
