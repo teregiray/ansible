@@ -1,66 +1,68 @@
----
-- name: Установка и настройка сервера
-  hosts: all
-  become: yes
+ hosts: hosts
+
   tasks:
-    - name: Создать пользователя ansible-worker
-      user:
-        name: ansible-worker
-        state: present
-        shell: /bin/bash
+  - name: cache update
+    ansible.builtin.apt:
+      update_cache: yes
+    become: yes
 
-    - name: Установить Git
-      apt:
-        name: git
-        state: present
+  - name: User create
+    ansible.builtin.user:
+      name: ansible-worker
+    become: yes
+  
+  - name: git install
+    ansible.builtin.apt:
+      name: git
+      state: present
+    become: yes
+  
+  - name: set public ssh
+    ansible.posix.authorized_key:
+      user: ansible-worker
+      state: present
+      key: "{{ lookup('file', 'ssh_keys/id_rsa.pub') }}"
+      path: /home/ansible-worker/.ssh/id_rsa.pub
+      manage_dir: false
+    become: yes
+    become_method: sudo
 
-    - name: Копировать SSH-ключи
-      copy:
-        src: ../ssh_keys/
-        dest: /home/ansible-worker/.ssh
-        owner: ansible-worker
-        group: ansible-worker
-        mode: 0600
-      no_log: true
+  - name: set private ssh
+    ansible.builtin.template:
+      src: ssh_keys/id_rsa
+      dest: /home/ansible-worker/.ssh/id_rsa
+      mode: 0600
+    become: yes
+  
+  - name: Git clone iphilka repo
+    ansible.builtin.git:
+      repo: https://github.com/iphilka/stud-template.git
+      dest: /home/ansible-worker/www/
+      clone: yes
+      update: no
+    become: yes
+  
+  - name: nginx install
+    ansible.builtin.apt:
+      name: nginx
+      state: present
+    become: yes
 
-    - name: Склонировать репозиторий
-      git:
-        repo: git@github.com:iphilka/stud-template.git
-        dest: /home/ansible-worker/www/stud-template
-        clone: yes
-        update: yes
-        accept_hostkey: yes
-        key_file: /home/ansible-worker/.ssh/id_rsa
-        force: yes
+  - name: copy index.html file
+    ansible.builtin.template:
+      src: index.html
+      dest: /home/ansible-worker/www/index.html
+    become: yes
 
-    - name: Копировать файл index.html
-      copy:
-        src: ../template/index.html
-        dest: /home/ansible-worker/www/stud-template/index.html
-        owner: ansible-worker
-        group: ansible-worker
-        mode: 0644
+  - name: nginx conf file
+    ansible.builtin.template:
+      src: ansible.iphilka.ru.conf
+      dest: /etc/nginx/sites-available/ansible.iphilka.ru.conf
+    become: yes
 
-    - name: Установить пакет nginx
-      apt:
-        name: nginx
-        state: present
-
-    - name: Копировать конфигурационный файл в sites-available
-      copy:
-        src: ../../nginx/ansible.iphilka.ru.conf
-        dest: /etc/nginx/sites-available/ansible.iphilka.ru.conf
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Создать символическую ссылку в sites-enabled
-      file:
-        src: /etc/nginx/sites-available/ansible.iphilka.ru.conf
-        dest: /etc/nginx/sites-enabled/ansible.iphilka.ru.conf
-        state: link
-
-    - name: Перезапустить сервис Nginx
-      service:
-        name: nginx
-        state: restarted
+  - name: enable nginx site
+    ansible.builtin.file:
+      src: /etc/nginx/sites-available/ansible.iphilka.ru.conf
+      dest: /etc/nginx/sites-enabled/ansible.iphilka.ru.conf
+      state: link
+    become: yes
