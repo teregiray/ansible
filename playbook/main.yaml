@@ -15,7 +15,7 @@
 
     - name: Copy SSH keys
       copy:
-        src: ssh_keys/
+        src: ../ssh_keys/
         dest: /home/ansible-worker/.ssh/
         mode: 700
       ignore_errors: no
@@ -27,7 +27,7 @@
 
     - name: Copy Nginx config file to sites-available
       copy:
-        src: config_file/ansible.iphilka.ru.conf
+        src: ../ansible.iphilka.ru.conf
         dest: /etc/nginx/sites-available/
       notify: Reload Nginx
 
