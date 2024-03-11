@@ -1,36 +1,51 @@
----
-- name: Setup Web Server
-  hosts: all
-  become: yes
+- hosts: webservers
+  become: true
   tasks:
-    - name: Create ansible-worker user
+    - name: create user (ansible-worker)
       user:
         name: ansible-worker
-        state: present
+      tags: [user, ansible-worker]
 
-    - name: Install git
+    - name: install git
       apt:
         name: git
         state: present
+        update_cache: yes
+      tags: [git]
 
-    - name: Copy SSH keys
-      copy:
-        src: ../ssh_keys/
-        dest: /home/ansible-worker/.ssh/
-        mode: 700
-      ignore_errors: no
+    - name: add ssh key
+      authorized_key:
+        key: "{{ lookup('file', '../ssh_keys/id_rsa.pub') }}"
+        user: ansible-worker
+      tags: [ssh, ansible-worker]
 
-    - name: Install Nginx
+    - name: create www dir
+      file:
+        path: /home/ansible-worker/www
+        state: directory
+
+    - name: git clone repo
+      git:
+        repo: https://github.com/iphilka/stud-template.git
+        dest: /home/ansible-worker/www/stud-template
+        force: yes
+      
+    - name: update index.html
+      template:
+        src: ../index.html
+        dest: /home/ansible-worker/www/stud-template/index.html
+
+    - name: install nginx
       apt:
         name: nginx
         state: present
+        update_cache: yes
 
-    - name: Copy Nginx config file to sites-available
-      copy:
+    - name: add nginx config
+      template:
         src: ../ansible.iphilka.ru.conf
-        dest: /etc/nginx/sites-available/
-      notify: Reload Nginx
-
+        dest: /etc/nginx/sites-available/ansible.iphilka.ru.conf
+    
     - name: Create symbolic link in sites-enabled
       file:
         src: /etc/nginx/sites-available/ansible.iphilka.ru.conf
@@ -38,8 +53,15 @@
         state: link
       notify: Reload Nginx
 
-  handlers:
-    - name: Reload Nginx
+    - name: create symlink
+      file: 
+        src: /etc/nginx/sites-available/ansible.iphilka.ru.conf
+        dest: /etc/nginx/sites-enabled/ansible.iphilka.ru
+        state: link
+      notify:
+        - restart nginx
+      
+    - name: restart nginx
       service:
         name: nginx
         state: reloaded
